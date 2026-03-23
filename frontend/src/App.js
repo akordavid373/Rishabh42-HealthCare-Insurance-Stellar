@@ -16,10 +16,12 @@ import {
   UserPlus,
   FileText,
   Award,
-  Database
+  Database,
+  Lock
 } from 'lucide-react';
 import './App.css';
 import MedicalRecordManager from './components/MedicalRecordManager';
+import MFASystem from './components/MFASystem';
 
 // Contract ABIs (simplified for demo)
 const HEALTHCARE_DRIPS_ABI = [
@@ -289,6 +291,13 @@ function App() {
               <Database className="w-4 h-4" />
               Records
             </button>
+            <button 
+              onClick={() => setActiveTab('security')}
+              className={activeTab === 'security' ? 'active' : ''}
+            >
+              <Lock className="w-4 h-4" />
+              Security
+            </button>
           </nav>
           
           <div className="wallet-section">
@@ -320,6 +329,7 @@ function App() {
             {activeTab === 'funding' && <FundingRequests />}
             {activeTab === 'contributors' && <Contributors />}
             {activeTab === 'records' && <MedicalRecordManager account={account} contract={contract} />}
+            {activeTab === 'security' && <MFASystem account={account} contract={contract} />}
           </>
         )}
       </main>

@@ -434,8 +434,43 @@ body {
 .dashboard,
 .funding-requests,
 .contributors,
-.medical-record-manager {
+.medical-record-manager,
+.mfa-system {
   animation: fadeIn 0.6s ease-out;
+}
+
+/* MFA System Specific Styles */
+.mfa-system .bg-white {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+}
+
+.mfa-system .transition-all {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.step-indicator {
+  transition: transform 0.3s ease;
+}
+
+/* Multi-factor Authenticator Grid Animation */
+.grid.gap-4 button {
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.grid.gap-4 button:hover {
+  transform: translateX(5px);
+}
+
+/* Glassmorphism for MFA Wizard */
+.fixed.inset-0.bg-gray-900\/40 {
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(12px);
+}
+
+/* Custom Checkbox/Radio styling simulation */
+.mfa-system .rounded-xl:hover {
+    box-shadow: 0 5px 15px rgba(0,0,0,0.05);
 }
 
 /* Medical Record Manager Specific Styles */

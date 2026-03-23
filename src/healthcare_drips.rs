@@ -114,6 +114,17 @@ pub struct ContributorStats {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserSecurity {
+    pub address: Address,
+    pub mfa_enabled: bool,
+    pub mfa_method: Symbol, // TOTP, SMS, EMAIL
+    pub backup_codes_count: u32,
+    pub trusted_devices_count: u32,
+    pub last_updated: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MedicalRecord {
     pub id: u64,
     pub owner: Address,
@@ -145,6 +156,9 @@ pub enum HealthcareDripsError {
     TransferFailed = 15,
     InvalidRecordId = 16,
     RecordNotOwned = 17,
+    MfaAlreadyEnabled = 18,
+    MfaNotEnabled = 19,
+    InvalidMfaMethod = 20,
 }
 
 // ========== CONTRACT ==========
@@ -678,6 +692,81 @@ impl HealthcareDrips {
         env.storage().instance()
             .get(&Symbol::new(&env, &format!("owner_records_{}", owner)))
             .unwrap_or(Vec::new(env))
+    }
+    
+    // ========== MFA SECURITY ==========
+    
+    pub fn setup_mfa(
+        env: &Env,
+        user: Address,
+        method: Symbol,
+        backup_codes: u32,
+    ) -> Result<(), HealthcareDripsError> {
+        user.require_auth();
+        
+        let security_key = Symbol::new(&env, &format!("security_{}", user));
+        if env.storage().instance().has(&security_key) {
+            let mut security: UserSecurity = env.storage().instance().get(&security_key).unwrap();
+            if security.mfa_enabled {
+                return Err(HealthcareDripsError::MfaAlreadyEnabled);
+            }
+            security.mfa_enabled = true;
+            security.mfa_method = method;
+            security.backup_codes_count = backup_codes;
+            security.last_updated = env.ledger().timestamp();
+            env.storage().instance().set(&security_key, &security);
+        } else {
+            let security = UserSecurity {
+                address: user.clone(),
+                mfa_enabled: true,
+                mfa_method: method,
+                backup_codes_count: backup_codes,
+                trusted_devices_count: 1,
+                last_updated: env.ledger().timestamp(),
+            };
+            env.storage().instance().set(&security_key, &security);
+        }
+        
+        Ok(())
+    }
+    
+    pub fn disable_mfa(env: &Env, user: Address) -> Result<(), HealthcareDripsError> {
+        user.require_auth();
+        
+        let security_key = Symbol::new(&env, &format!("security_{}", user));
+        let mut security: UserSecurity = env.storage().instance()
+            .get(&security_key)
+            .ok_or(HealthcareDripsError::MfaNotEnabled)?;
+            
+        security.mfa_enabled = false;
+        security.last_updated = env.ledger().timestamp();
+        
+        env.storage().instance().set(&security_key, &security);
+        
+        Ok(())
+    }
+    
+    pub fn get_user_security(env: &Env, user: Address) -> Result<UserSecurity, HealthcareDripsError> {
+        let security_key = Symbol::new(&env, &format!("security_{}", user));
+        env.storage().instance()
+            .get(&security_key)
+            .ok_or(HealthcareDripsError::MfaNotEnabled)
+    }
+    
+    pub fn add_trusted_device(env: &Env, user: Address) -> Result<(), HealthcareDripsError> {
+        user.require_auth();
+        
+        let security_key = Symbol::new(&env, &format!("security_{}", user));
+        let mut security: UserSecurity = env.storage().instance()
+            .get(&security_key)
+            .ok_or(HealthcareDripsError::MfaNotEnabled)?;
+            
+        security.trusted_devices_count += 1;
+        security.last_updated = env.ledger().timestamp();
+        
+        env.storage().instance().set(&security_key, &security);
+        
+        Ok(())
     }
     
     // ========== VIEW FUNCTIONS ==========
