@@ -6,6 +6,7 @@ mod tests {
 
     use crate::healthcare_drips::{
         HealthcareDrips, HealthcareDripsError, ContributorLevel, IssueType, IssueStatus,
+        FraudRiskLevel, FraudFlag, FraudThresholds,
     };
 
     #[contract]
@@ -399,5 +400,362 @@ mod tests {
         let active_issues = HealthcareDrips::get_active_issues(&env);
         assert_eq!(active_issues.len(), 1);
         assert!(active_issues.contains(&1));
+    }
+
+    // ========== FRAUD DETECTION TESTS ==========
+
+    #[test]
+    fn test_fraud_detection_initialization() {
+        let (env, _, _, _, _, _) = setup_contract();
+
+        // Check if fraud thresholds are initialized
+        let thresholds = env.storage().instance()
+            .get::<_, FraudThresholds>(&Symbol::short("fraud_thresholds"))
+            .unwrap();
+        
+        assert_eq!(thresholds.max_monthly_claims, 5);
+        assert_eq!(thresholds.max_single_claim_amount, 10000);
+        assert_eq!(thresholds.risk_score_threshold, 50);
+    }
+
+    #[test]
+    fn test_analyze_claim_fraud_low_risk() {
+        let (env, admin, patient, _, _, _) = setup_contract();
+
+        // Create a normal claim
+        let issue_id = HealthcareDrips::create_issue(
+            &env,
+            patient.clone(),
+            IssueType::Surgery,
+            String::from_str(&env, "Normal Surgery"),
+            String::from_str(&env, "Standard surgical procedure"),
+            5000i128, // Normal amount
+            String::from_str(&env, "QmHash123"),
+            env.ledger().timestamp() + 86400 * 30,
+            3u32,
+            admin.clone(),
+        ).unwrap();
+
+        // Analyze for fraud
+        let analysis = HealthcareDrips::analyze_claim_fraud(&env, issue_id).unwrap();
+        
+        assert_eq!(analysis.risk_level, FraudRiskLevel::Low);
+        assert!(analysis.risk_score < 20);
+        assert!(!analysis.requires_review);
+        assert!(!analysis.anomaly_detected);
+    }
+
+    #[test]
+    fn test_analyze_claim_fraud_high_amount() {
+        let (env, admin, patient, _, _, _) = setup_contract();
+
+        // Create a high-value claim
+        let issue_id = HealthcareDrips::create_issue(
+            &env,
+            patient.clone(),
+            IssueType::Surgery,
+            String::from_str(&env, "Expensive Surgery"),
+            String::from_str(&env, "High-cost surgical procedure"),
+            15000i128, // High amount above threshold
+            String::from_str(&env, "QmHash123"),
+            env.ledger().timestamp() + 86400 * 30,
+            3u32,
+            admin.clone(),
+        ).unwrap();
+
+        // Analyze for fraud
+        let analysis = HealthcareDrips::analyze_claim_fraud(&env, issue_id).unwrap();
+        
+        assert!(analysis.risk_score >= 25);
+        assert!(analysis.flags.iter().any(|&flag| flag == FraudFlag::UnusualAmount));
+    }
+
+    #[test]
+    fn test_analyze_claim_pattern_new_patient() {
+        let (env, _, patient, _, _, _) = setup_contract();
+
+        // Analyze claim pattern for new patient
+        let pattern = HealthcareDrips::analyze_claim_pattern(&env, patient.clone()).unwrap();
+        
+        assert_eq!(pattern.claim_frequency, 0);
+        assert_eq!(pattern.average_amount, 0);
+        assert_eq!(pattern.total_claimed, 0);
+        assert_eq!(pattern.unique_providers, 0);
+        assert!(pattern.claim_types.is_empty());
+        assert_eq!(pattern.risk_score, 0);
+    }
+
+    #[test]
+    fn test_analyze_claim_pattern_multiple_claims() {
+        let (env, admin, patient, _, _, _) = setup_contract();
+
+        // Create multiple claims for the same patient
+        for i in 1..=3 {
+            HealthcareDrips::create_issue(
+                &env,
+                patient.clone(),
+                IssueType::Surgery,
+                String::from_str(&env, &format!("Surgery {}", i)),
+                String::from_str(&env, &format!("Description {}", i)),
+                3000i128 + (i as i128 * 1000),
+                String::from_str(&env, &format!("QmHash{}", i)),
+                env.ledger().timestamp() + 86400 * 30,
+                3u32,
+                admin.clone(),
+            ).unwrap();
+        }
+
+        // Analyze claim pattern
+        let pattern = HealthcareDrips::analyze_claim_pattern(&env, patient.clone()).unwrap();
+        
+        assert_eq!(pattern.claim_frequency, 3);
+        assert!(pattern.average_amount > 0);
+        assert!(pattern.total_claimed > 0);
+        assert_eq!(pattern.unique_providers, 1); // Same admin
+        assert_eq!(pattern.claim_types.len(), 1); // All Surgery type
+    }
+
+    #[test]
+    fn test_detect_pattern_anomaly() {
+        let (env, admin, patient, _, _, _) = setup_contract();
+
+        // Create a pattern of normal claims
+        for i in 1..=3 {
+            HealthcareDrips::create_issue(
+                &env,
+                patient.clone(),
+                IssueType::Surgery,
+                String::from_str(&env, &format!("Surgery {}", i)),
+                String::from_str(&env, &format!("Description {}", i)),
+                5000i128, // Consistent amount
+                String::from_str(&env, &format!("QmHash{}", i)),
+                env.ledger().timestamp() + 86400 * 30,
+                3u32,
+                admin.clone(),
+            ).unwrap();
+        }
+
+        // Get pattern
+        let pattern = HealthcareDrips::analyze_claim_pattern(&env, patient.clone()).unwrap();
+        
+        // Create a claim with significantly different amount
+        let anomaly_issue_id = HealthcareDrips::create_issue(
+            &env,
+            patient.clone(),
+            IssueType::Surgery,
+            String::from_str(&env, "Anomaly Surgery"),
+            String::from_str(&env, "Very expensive surgery"),
+            20000i128, // Much higher amount
+            String::from_str(&env, "QmHashAnomaly"),
+            env.ledger().timestamp() + 86400 * 30,
+            3u32,
+            admin.clone(),
+        ).unwrap();
+
+        let anomaly_issue = HealthcareDrips::get_issue(&env, anomaly_issue_id).unwrap();
+        
+        // Detect anomaly
+        let is_anomaly = HealthcareDrips::detect_pattern_anomaly(&env, &pattern, &anomaly_issue);
+        assert!(is_anomaly); // Should detect the amount anomaly
+    }
+
+    #[test]
+    fn test_detect_timing_anomaly() {
+        let (env, admin, patient, _, _, _) = setup_contract();
+
+        // Create multiple claims in quick succession
+        let base_time = env.ledger().timestamp();
+        
+        for i in 1..=4 {
+            // Set time to create claims within the same day
+            env.ledger().set_timestamp(base_time + (i as u64 * 3600)); // 1 hour apart
+            
+            HealthcareDrips::create_issue(
+                &env,
+                patient.clone(),
+                IssueType::EmergencyTreatment,
+                String::from_str(&env, &format!("Emergency {}", i)),
+                String::from_str(&env, &format!("Emergency description {}", i)),
+                1000i128,
+                String::from_str(&env, &format!("QmHash{}", i)),
+                env.ledger().timestamp() + 86400 * 30,
+                3u32,
+                admin.clone(),
+            ).unwrap();
+        }
+
+        // Check for timing anomaly with the last claim
+        let is_anomaly = HealthcareDrips::detect_timing_anomaly(&env, patient.clone(), base_time + 4 * 3600);
+        assert!(is_anomaly); // Should detect timing anomaly (4 claims in 4 hours)
+    }
+
+    #[test]
+    fn test_flag_high_risk_claims() {
+        let (env, admin, patient, _, _, _) = setup_contract();
+
+        // Create a high-risk claim
+        let issue_id = HealthcareDrips::create_issue(
+            &env,
+            patient.clone(),
+            IssueType::Surgery,
+            String::from_str(&env, "High Risk Surgery"),
+            String::from_str(&env, "Very expensive procedure"),
+            20000i128, // High amount
+            String::from_str(&env, "QmHash123"),
+            env.ledger().timestamp() + 86400 * 30,
+            3u32,
+            admin.clone(),
+        ).unwrap();
+
+        // Try to flag the claim
+        let result = HealthcareDrips::flag_high_risk_claims(&env, issue_id);
+        
+        // Should be flagged due to high amount
+        assert_eq!(result, Err(HealthcareDripsError::ClaimFlagged));
+        
+        // Check if claim is in flagged list
+        let flagged_claims = HealthcareDrips::get_flagged_claims(&env);
+        assert!(flagged_claims.contains(&issue_id));
+        
+        // Check if issue status was updated
+        let issue = HealthcareDrips::get_issue(&env, issue_id).unwrap();
+        assert_eq!(issue.status, IssueStatus::UnderReview);
+    }
+
+    #[test]
+    fn test_submit_issue_with_fraud_detection() {
+        let (env, admin, patient, _, _, _) = setup_contract();
+
+        // Create a normal claim
+        let issue_id = HealthcareDrips::create_issue(
+            &env,
+            patient.clone(),
+            IssueType::Surgery,
+            String::from_str(&env, "Normal Surgery"),
+            String::from_str(&env, "Standard procedure"),
+            5000i128,
+            String::from_str(&env, "QmHash123"),
+            env.ledger().timestamp() + 86400 * 30,
+            3u32,
+            admin.clone(),
+        ).unwrap();
+
+        // Submit issue (should pass fraud detection)
+        let result = HealthcareDrips::submit_issue(&env, issue_id, patient.clone());
+        assert_eq!(result, Ok(()));
+        
+        let issue = HealthcareDrips::get_issue(&env, issue_id).unwrap();
+        assert_eq!(issue.status, IssueStatus::Submitted);
+        
+        // Create a high-risk claim
+        let high_risk_id = HealthcareDrips::create_issue(
+            &env,
+            patient.clone(),
+            IssueType::Surgery,
+            String::from_str(&env, "High Risk Surgery"),
+            String::from_str(&env, "Very expensive procedure"),
+            20000i128, // High amount
+            String::from_str(&env, "QmHash456"),
+            env.ledger().timestamp() + 86400 * 30,
+            3u32,
+            admin.clone(),
+        ).unwrap();
+
+        // Submit high-risk issue (should be flagged)
+        let result = HealthcareDrips::submit_issue(&env, high_risk_id, patient.clone());
+        assert_eq!(result, Ok(())); // Still succeeds but gets flagged
+        
+        let high_risk_issue = HealthcareDrips::get_issue(&env, high_risk_id).unwrap();
+        assert_eq!(high_risk_issue.status, IssueStatus::UnderReview);
+    }
+
+    #[test]
+    fn test_update_fraud_thresholds() {
+        let (env, admin, _, _, _, _) = setup_contract();
+
+        // Update thresholds
+        let new_thresholds = FraudThresholds {
+            max_monthly_claims: 10,
+            max_single_claim_amount: 20000,
+            risk_score_threshold: 60,
+            frequency_penalty: 15,
+            amount_penalty: 25,
+            pattern_penalty: 35,
+        };
+
+        let result = HealthcareDrips::update_fraud_thresholds(&env, new_thresholds.clone(), admin.clone());
+        assert_eq!(result, Ok(()));
+
+        // Try with unauthorized user
+        let unauthorized = Address::random(&env);
+        let result = HealthcareDrips::update_fraud_thresholds(&env, new_thresholds, unauthorized);
+        assert_eq!(result, Err(HealthcareDripsError::Unauthorized));
+    }
+
+    #[test]
+    fn test_remove_flagged_claim() {
+        let (env, admin, patient, _, reviewer, _) = setup_contract();
+
+        // Create and flag a high-risk claim
+        let issue_id = HealthcareDrips::create_issue(
+            &env,
+            patient.clone(),
+            IssueType::Surgery,
+            String::from_str(&env, "High Risk Surgery"),
+            String::from_str(&env, "Very expensive procedure"),
+            20000i128,
+            String::from_str(&env, "QmHash123"),
+            env.ledger().timestamp() + 86400 * 30,
+            3u32,
+            admin.clone(),
+        ).unwrap();
+
+        HealthcareDrips::flag_high_risk_claims(&env, issue_id).unwrap_err(); // Expect error due to flagging
+        
+        // Verify it's flagged
+        let flagged_claims = HealthcareDrips::get_flagged_claims(&env);
+        assert!(flagged_claims.contains(&issue_id));
+
+        // Remove from flagged list (as reviewer)
+        let result = HealthcareDrips::remove_flagged_claim(&env, issue_id, reviewer.clone());
+        assert_eq!(result, Ok(()));
+
+        // Verify it's no longer flagged
+        let flagged_claims = HealthcareDrips::get_flagged_claims(&env);
+        assert!(!flagged_claims.contains(&issue_id));
+
+        // Try with unauthorized user
+        let unauthorized = Address::random(&env);
+        let result = HealthcareDrips::remove_flagged_claim(&env, issue_id, unauthorized);
+        assert_eq!(result, Err(HealthcareDripsError::Unauthorized));
+    }
+
+    #[test]
+    fn test_get_fraud_analysis() {
+        let (env, admin, patient, _, _, _) = setup_contract();
+
+        // Create a claim
+        let issue_id = HealthcareDrips::create_issue(
+            &env,
+            patient.clone(),
+            IssueType::Surgery,
+            String::from_str(&env, "Test Surgery"),
+            String::from_str(&env, "Test description"),
+            5000i128,
+            String::from_str(&env, "QmHash123"),
+            env.ledger().timestamp() + 86400 * 30,
+            3u32,
+            admin.clone(),
+        ).unwrap();
+
+        // Analyze for fraud
+        let analysis = HealthcareDrips::analyze_claim_fraud(&env, issue_id).unwrap();
+        
+        // Retrieve the analysis
+        let retrieved_analysis = HealthcareDrips::get_fraud_analysis(&env, issue_id).unwrap();
+        
+        assert_eq!(analysis.issue_id, retrieved_analysis.issue_id);
+        assert_eq!(analysis.risk_score, retrieved_analysis.risk_score);
+        assert_eq!(analysis.risk_level, retrieved_analysis.risk_level);
     }
 }

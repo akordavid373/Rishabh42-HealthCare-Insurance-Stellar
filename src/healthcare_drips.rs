@@ -112,6 +112,67 @@ pub struct ContributorStats {
     pub joined: u64,
 }
 
+// ========== FRAUD DETECTION TYPES ==========
+
+#[contracttype]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum FraudRiskLevel {
+    Low = 0,
+    Medium = 1,
+    High = 2,
+    Critical = 3,
+}
+
+#[contracttype]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum FraudFlag {
+    None = 0,
+    SuspiciousPattern = 1,
+    HighFrequency = 2,
+    UnusualAmount = 3,
+    DuplicateClaim = 4,
+    AnomalousTiming = 5,
+    ReputationRisk = 6,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimPattern {
+    pub patient: Address,
+    pub claim_frequency: u32, // claims per month
+    pub average_amount: i128,
+    pub total_claimed: i128,
+    pub unique_providers: u32,
+    pub claim_types: Vec<IssueType>,
+    pub last_activity: u64,
+    pub risk_score: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FraudAnalysis {
+    pub issue_id: u64,
+    pub patient: Address,
+    pub risk_level: FraudRiskLevel,
+    pub risk_score: u32,
+    pub flags: Vec<FraudFlag>,
+    pub pattern_analysis: ClaimPattern,
+    pub anomaly_detected: bool,
+    pub analysis_timestamp: u64,
+    pub requires_review: bool,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FraudThresholds {
+    pub max_monthly_claims: u32,
+    pub max_single_claim_amount: i128,
+    pub risk_score_threshold: u32,
+    pub frequency_penalty: u32,
+    pub amount_penalty: u32,
+    pub pattern_penalty: u32,
+}
+
 // ========== ERRORS ==========
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -131,6 +192,10 @@ pub enum HealthcareDripsError {
     InvalidToken = 13,
     InsufficientBalance = 14,
     TransferFailed = 15,
+    FraudDetectionFailed = 16,
+    HighRiskDetected = 17,
+    ClaimFlagged = 18,
+    PatternAnalysisFailed = 19,
 }
 
 // ========== CONTRACT ==========
@@ -140,26 +205,43 @@ pub struct HealthcareDrips;
 #[contractimpl]
 impl HealthcareDrips {
     // ========== INITIALIZATION ==========
-    
+
     pub fn initialize(env: &Env, admin: Address) {
         // Set up roles
         env.storage().instance().set(&ISSUE_CREATOR, &admin);
         env.storage().instance().set(&REVIEWER, &admin);
         env.storage().instance().set(&APPROVER, &admin);
-        
+
         // Initialize counters
         env.storage().instance().set(&Symbol::short("next_drip_id"), &1u64);
         env.storage().instance().set(&Symbol::short("next_issue_id"), &1u64);
-        
+
         // Initialize verified contributors list
         env.storage().instance().set(&Symbol::short("verified_contributors"), &Vec::new(env));
-        
+
         // Initialize active issues list
         env.storage().instance().set(&Symbol::short("active_issues"), &Vec::new(env));
+
+        // Initialize fraud detection
+        Self::initialize_fraud_detection(env);
     }
-    
+
+    // Initialize fraud detection
+    fn initialize_fraud_detection(env: &Env) {
+        // Initialize fraud thresholds
+        let thresholds = FraudThresholds {
+            max_monthly_claims: 5,
+            max_single_claim_amount: 10000,
+            risk_score_threshold: 50,
+            frequency_penalty: 10,
+            amount_penalty: 20,
+            pattern_penalty: 30,
+        };
+        env.storage().instance().set(&Symbol::short("fraud_thresholds"), &thresholds);
+    }
+
     // ========== PREMIUM DRIPS ==========
-    
+
     pub fn create_premium_drip(
         env: &Env,
         patient: Address,
@@ -338,7 +420,26 @@ impl HealthcareDrips {
             return Err(HealthcareDripsError::Unauthorized);
         }
         
-        issue.status = IssueStatus::Submitted;
+        // Perform fraud detection analysis
+        let fraud_analysis = Self::analyze_claim_fraud(env, issue_id)?;
+        
+        // Check if claim should be flagged for review
+        if fraud_analysis.requires_review {
+            issue.status = IssueStatus::UnderReview;
+            
+            // Add to flagged claims
+            let mut flagged_claims: Vec<u64> = env.storage().instance()
+                .get(&Symbol::short("flagged_claims"))
+                .unwrap_or(Vec::new(env));
+            
+            if !flagged_claims.iter().any(|&id| id == issue_id) {
+                flagged_claims.push_back(issue_id);
+                env.storage().instance().set(&Symbol::short("flagged_claims"), &flagged_claims);
+            }
+        } else {
+            issue.status = IssueStatus::Submitted;
+        }
+        
         issue.last_updated = env.ledger().timestamp();
         
         env.storage().instance().set(&issue_key, &issue);
@@ -637,5 +738,312 @@ impl HealthcareDrips {
             });
         
         env.storage().instance().set(&stats_key, &stats);
+    }
+
+    // ========== FRAUD DETECTION FUNCTIONS ==========
+
+    /// Analyze claim for fraud patterns and return risk assessment
+    pub fn analyze_claim_fraud(
+        env: &Env,
+        issue_id: u64,
+    ) -> Result<FraudAnalysis, HealthcareDripsError> {
+        let issue: Issue = Self::get_issue(env, issue_id)?;
+        
+        // Get patient's claim pattern
+        let pattern = Self::analyze_claim_pattern(env, issue.patient.clone())?;
+        
+        // Calculate risk score
+        let mut risk_score = 0u32;
+        let mut flags = Vec::new(env);
+        
+        // Check claim frequency
+        if pattern.claim_frequency > 3 {
+            risk_score += 15;
+            flags.push_back(FraudFlag::HighFrequency);
+        }
+        
+        // Check claim amount
+        let thresholds = Self::get_fraud_thresholds(env);
+        if issue.funding_amount > thresholds.max_single_claim_amount {
+            risk_score += 25;
+            flags.push_back(FraudFlag::UnusualAmount);
+        }
+        
+        // Check for pattern anomalies
+        if Self::detect_pattern_anomaly(env, &pattern, &issue) {
+            risk_score += 20;
+            flags.push_back(FraudFlag::SuspiciousPattern);
+        }
+        
+        // Check timing anomalies
+        if Self::detect_timing_anomaly(env, issue.patient.clone(), issue.created) {
+            risk_score += 15;
+            flags.push_back(FraudFlag::AnomalousTiming);
+        }
+        
+        // Determine risk level
+        let risk_level = match risk_score {
+            0..=20 => FraudRiskLevel::Low,
+            21..=40 => FraudRiskLevel::Medium,
+            41..=60 => FraudRiskLevel::High,
+            _ => FraudRiskLevel::Critical,
+        };
+        
+        let requires_review = risk_score >= thresholds.risk_score_threshold;
+        
+        let analysis = FraudAnalysis {
+            issue_id,
+            patient: issue.patient,
+            risk_level,
+            risk_score,
+            flags,
+            pattern_analysis: pattern,
+            anomaly_detected: risk_score > 30,
+            analysis_timestamp: env.ledger().timestamp(),
+            requires_review,
+        };
+        
+        // Store analysis
+        env.storage().instance().set(
+            &Symbol::new(&env, &format!("fraud_analysis_{}", issue_id)),
+            &analysis
+        );
+        
+        Ok(analysis)
+    }
+
+    /// Analyze patient's claim patterns over time
+    pub fn analyze_claim_pattern(
+        env: &Env,
+        patient: Address,
+    ) -> Result<ClaimPattern, HealthcareDripsError> {
+        let patient_issues = Self::get_patient_issues(env, patient.clone());
+        
+        if patient_issues.is_empty() {
+            return Ok(ClaimPattern {
+                patient,
+                claim_frequency: 0,
+                average_amount: 0,
+                total_claimed: 0,
+                unique_providers: 0,
+                claim_types: Vec::new(env),
+                last_activity: 0,
+                risk_score: 0,
+            });
+        }
+        
+        let mut total_amount = 0i128;
+        let mut claim_types = Vec::new(env);
+        let mut creators = Vec::new(env);
+        let mut last_activity = 0u64;
+        
+        for issue_id in patient_issues.iter() {
+            if let Ok(issue) = Self::get_issue(env, *issue_id) {
+                total_amount += issue.funding_amount;
+                
+                // Track unique claim types
+                if !claim_types.iter().any(|&t| t == issue.issue_type) {
+                    claim_types.push_back(issue.issue_type);
+                }
+                
+                // Track unique providers (creators)
+                if !creators.iter().any(|&c| c == issue.creator) {
+                    creators.push_back(issue.creator);
+                }
+                
+                if issue.created > last_activity {
+                    last_activity = issue.created;
+                }
+            }
+        }
+        
+        let count = patient_issues.len() as u32;
+        let average_amount = if count > 0 { total_amount / count as i128 } else { 0 };
+        
+        // Calculate claim frequency (claims per month over last 30 days)
+        let current_time = env.ledger().timestamp();
+        let thirty_days_ago = current_time - (30 * 24 * 60 * 60);
+        let recent_claims = patient_issues.iter()
+            .filter(|&&issue_id| {
+                if let Ok(issue) = Self::get_issue(env, issue_id) {
+                    issue.created >= thirty_days_ago
+                } else {
+                    false
+                }
+            })
+            .count() as u32;
+        
+        let claim_frequency = recent_claims;
+        
+        // Calculate pattern risk score
+        let mut pattern_risk = 0u32;
+        if claim_frequency > 3 { pattern_risk += 10; }
+        if creators.len() > 5 { pattern_risk += 15; }
+        if claim_types.len() > 6 { pattern_risk += 10; }
+        
+        Ok(ClaimPattern {
+            patient,
+            claim_frequency,
+            average_amount,
+            total_claimed: total_amount,
+            unique_providers: creators.len() as u32,
+            claim_types,
+            last_activity,
+            risk_score: pattern_risk,
+        })
+    }
+
+    /// Detect anomalies in claim patterns
+    pub fn detect_pattern_anomaly(
+        env: &Env,
+        pattern: &ClaimPattern,
+        current_issue: &Issue,
+    ) -> bool {
+        // Check if current claim deviates significantly from pattern
+        let amount_deviation = if pattern.average_amount > 0 {
+            ((current_issue.funding_amount - pattern.average_amount).abs() * 100) / pattern.average_amount
+        } else {
+            0
+        };
+        
+        // Flag if amount is more than 200% different from average
+        if amount_deviation > 200 {
+            return true;
+        }
+        
+        // Check for unusual claim type combinations
+        if pattern.claim_types.len() > 4 && 
+           !pattern.claim_types.iter().any(|&t| t == current_issue.issue_type) {
+            return true;
+        }
+        
+        false
+    }
+
+    /// Detect timing anomalies in claim submissions
+    pub fn detect_timing_anomaly(
+        env: &Env,
+        patient: Address,
+        current_time: u64,
+    ) -> bool {
+        let patient_issues = Self::get_patient_issues(env, patient);
+        
+        if patient_issues.len() < 2 {
+            return false;
+        }
+        
+        // Check for multiple claims in short time period
+        let one_day_ago = current_time - (24 * 60 * 60);
+        let recent_claims = patient_issues.iter()
+            .filter(|&&issue_id| {
+                if let Ok(issue) = Self::get_issue(env, issue_id) {
+                    issue.created >= one_day_ago && issue.created <= current_time
+                } else {
+                    false
+                }
+            })
+            .count();
+        
+        recent_claims > 2
+    }
+
+    /// Automatically flag high-risk claims for manual review
+    pub fn flag_high_risk_claims(
+        env: &Env,
+        issue_id: u64,
+    ) -> Result<(), HealthcareDripsError> {
+        let analysis = Self::analyze_claim_fraud(env, issue_id)?;
+        
+        if analysis.requires_review {
+            // Add to flagged claims list
+            let mut flagged_claims: Vec<u64> = env.storage().instance()
+                .get(&Symbol::short("flagged_claims"))
+                .unwrap_or(Vec::new(env));
+            
+            if !flagged_claims.iter().any(|&id| id == issue_id) {
+                flagged_claims.push_back(issue_id);
+                env.storage().instance().set(&Symbol::short("flagged_claims"), &flagged_claims);
+            }
+            
+            // Update issue status to require additional review
+            let issue_key = Symbol::new(&env, &format!("issue_{}", issue_id));
+            let mut issue: Issue = env.storage().instance()
+                .get(&issue_key)
+                .ok_or(HealthcareDripsError::InvalidIssueId)?;
+            
+            if issue.status == IssueStatus::Submitted {
+                issue.status = IssueStatus::UnderReview;
+                env.storage().instance().set(&issue_key, &issue);
+            }
+            
+            return Err(HealthcareDripsError::ClaimFlagged);
+        }
+        
+        Ok(())
+    }
+
+    /// Get fraud detection thresholds
+    fn get_fraud_thresholds(env: &Env) -> FraudThresholds {
+        env.storage().instance()
+            .get(&Symbol::short("fraud_thresholds"))
+            .unwrap_or(FraudThresholds {
+                max_monthly_claims: 5,
+                max_single_claim_amount: 10000,
+                risk_score_threshold: 50,
+                frequency_penalty: 10,
+                amount_penalty: 20,
+                pattern_penalty: 30,
+            })
+    }
+
+    /// Update fraud detection thresholds (admin only)
+    pub fn update_fraud_thresholds(
+        env: &Env,
+        thresholds: FraudThresholds,
+        caller: Address,
+    ) -> Result<(), HealthcareDripsError> {
+        if !Self::has_role(env, caller, ISSUE_CREATOR) {
+            return Err(HealthcareDripsError::Unauthorized);
+        }
+        
+        env.storage().instance().set(&Symbol::short("fraud_thresholds"), &thresholds);
+        Ok(())
+    }
+
+    /// Get fraud analysis for a specific claim
+    pub fn get_fraud_analysis(
+        env: &Env,
+        issue_id: u64,
+    ) -> Result<FraudAnalysis, HealthcareDripsError> {
+        env.storage().instance()
+            .get(&Symbol::new(&env, &format!("fraud_analysis_{}", issue_id)))
+            .ok_or(HealthcareDripsError::FraudDetectionFailed)
+    }
+
+    /// Get all flagged claims requiring review
+    pub fn get_flagged_claims(env: &Env) -> Vec<u64> {
+        env.storage().instance()
+            .get(&Symbol::short("flagged_claims"))
+            .unwrap_or(Vec::new(env))
+    }
+
+    /// Remove claim from flagged list after review
+    pub fn remove_flagged_claim(
+        env: &Env,
+        issue_id: u64,
+        caller: Address,
+    ) -> Result<(), HealthcareDripsError> {
+        if !Self::has_role(env, caller, REVIEWER) {
+            return Err(HealthcareDripsError::Unauthorized);
+        }
+        
+        let mut flagged_claims: Vec<u64> = env.storage().instance()
+            .get(&Symbol::short("flagged_claims"))
+            .unwrap_or(Vec::new(env));
+        
+        flagged_claims.retain(|&id| id != issue_id);
+        env.storage().instance().set(&Symbol::short("flagged_claims"), &flagged_claims);
+        
+        Ok(())
     }
 }
