@@ -112,6 +112,18 @@ pub struct ContributorStats {
     pub joined: u64,
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MedicalRecord {
+    pub id: u64,
+    pub owner: Address,
+    pub cid: String, // Encrypted IPFS Hash
+    pub description: String,
+    pub created: u64,
+    pub version: u32,
+    pub authorized_users: Vec<Address>,
+}
+
 // ========== ERRORS ==========
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -131,6 +143,8 @@ pub enum HealthcareDripsError {
     InvalidToken = 13,
     InsufficientBalance = 14,
     TransferFailed = 15,
+    InvalidRecordId = 16,
+    RecordNotOwned = 17,
 }
 
 // ========== CONTRACT ==========
@@ -150,6 +164,7 @@ impl HealthcareDrips {
         // Initialize counters
         env.storage().instance().set(&Symbol::short("next_drip_id"), &1u64);
         env.storage().instance().set(&Symbol::short("next_issue_id"), &1u64);
+        env.storage().instance().set(&Symbol::short("next_record_id"), &1u64);
         
         // Initialize verified contributors list
         env.storage().instance().set(&Symbol::short("verified_contributors"), &Vec::new(env));
@@ -526,6 +541,145 @@ impl HealthcareDrips {
         Ok(())
     }
     
+    // ========== MEDICAL RECORDS ==========
+    
+    pub fn upload_medical_record(
+        env: &Env,
+        owner: Address,
+        cid: String,
+        description: String,
+    ) -> Result<u64, HealthcareDripsError> {
+        owner.require_auth();
+        
+        let next_id = Self::get_next_record_id(env);
+        let current_time = env.ledger().timestamp();
+        
+        let record = MedicalRecord {
+            id: next_id,
+            owner: owner.clone(),
+            cid,
+            description,
+            created: current_time,
+            version: 1,
+            authorized_users: Vec::new(env),
+        };
+        
+        let record_key = Symbol::new(&env, &format!("record_{}", next_id));
+        env.storage().instance().set(&record_key, &record);
+        
+        // Add to owner's records
+        let mut owner_records: Vec<u64> = env.storage().instance()
+            .get(&Symbol::new(&env, &format!("owner_records_{}", owner)))
+            .unwrap_or(Vec::new(env));
+        owner_records.push_back(next_id);
+        env.storage().instance().set(&Symbol::new(&env, &format!("owner_records_{}", owner)), &owner_records);
+        
+        Ok(next_id)
+    }
+    
+    pub fn update_medical_record(
+        env: &Env,
+        record_id: u64,
+        cid: String,
+        caller: Address,
+    ) -> Result<(), HealthcareDripsError> {
+        caller.require_auth();
+        
+        let record_key = Symbol::new(&env, &format!("record_{}", record_id));
+        let mut record: MedicalRecord = env.storage().instance()
+            .get(&record_key)
+            .ok_or(HealthcareDripsError::InvalidRecordId)?;
+            
+        if record.owner != caller {
+            return Err(HealthcareDripsError::RecordNotOwned);
+        }
+        
+        record.cid = cid;
+        record.version += 1;
+        record.created = env.ledger().timestamp();
+        
+        env.storage().instance().set(&record_key, &record);
+        
+        Ok(())
+    }
+    
+    pub fn authorize_user(
+        env: &Env,
+        record_id: u64,
+        user_to_authorize: Address,
+        caller: Address,
+    ) -> Result<(), HealthcareDripsError> {
+        caller.require_auth();
+        
+        let record_key = Symbol::new(&env, &format!("record_{}", record_id));
+        let mut record: MedicalRecord = env.storage().instance()
+            .get(&record_key)
+            .ok_or(HealthcareDripsError::InvalidRecordId)?;
+            
+        if record.owner != caller {
+            return Err(HealthcareDripsError::RecordNotOwned);
+        }
+        
+        if !record.authorized_users.contains(user_to_authorize.clone()) {
+            record.authorized_users.push_back(user_to_authorize);
+            env.storage().instance().set(&record_key, &record);
+        }
+        
+        Ok(())
+    }
+    
+    pub fn revoke_user(
+        env: &Env,
+        record_id: u64,
+        user_to_revoke: Address,
+        caller: Address,
+    ) -> Result<(), HealthcareDripsError> {
+        caller.require_auth();
+        
+        let record_key = Symbol::new(&env, &format!("record_{}", record_id));
+        let mut record: MedicalRecord = env.storage().instance()
+            .get(&record_key)
+            .ok_or(HealthcareDripsError::InvalidRecordId)?;
+            
+        if record.owner != caller {
+            return Err(HealthcareDripsError::RecordNotOwned);
+        }
+        
+        let mut new_authorized = Vec::new(env);
+        for user in record.authorized_users.iter() {
+            if user != user_to_revoke {
+                new_authorized.push_back(user);
+            }
+        }
+        record.authorized_users = new_authorized;
+        env.storage().instance().set(&record_key, &record);
+        
+        Ok(())
+    }
+    
+    pub fn get_medical_record(
+        env: &Env,
+        record_id: u64,
+        caller: Address,
+    ) -> Result<MedicalRecord, HealthcareDripsError> {
+        let record_key = Symbol::new(&env, &format!("record_{}", record_id));
+        let record: MedicalRecord = env.storage().instance()
+            .get(&record_key)
+            .ok_or(HealthcareDripsError::InvalidRecordId)?;
+            
+        if record.owner != caller && !record.authorized_users.contains(caller) && !Self::has_role(env, caller, REVIEWER) {
+            return Err(HealthcareDripsError::Unauthorized);
+        }
+        
+        Ok(record)
+    }
+    
+    pub fn get_owner_records(env: &Env, owner: Address) -> Vec<u64> {
+        env.storage().instance()
+            .get(&Symbol::new(&env, &format!("owner_records_{}", owner)))
+            .unwrap_or(Vec::new(env))
+    }
+    
     // ========== VIEW FUNCTIONS ==========
     
     pub fn get_premium_drip(env: &Env, drip_id: u64) -> Result<PremiumDrip, HealthcareDripsError> {
@@ -600,6 +754,13 @@ impl HealthcareDrips {
     
     fn get_next_issue_id(env: &Env) -> u64 {
         let key = Symbol::short("next_issue_id");
+        let next_id = env.storage().instance().get(&key).unwrap_or(1u64);
+        env.storage().instance().set(&key, &(next_id + 1));
+        next_id
+    }
+    
+    fn get_next_record_id(env: &Env) -> u64 {
+        let key = Symbol::short("next_record_id");
         let next_id = env.storage().instance().get(&key).unwrap_or(1u64);
         env.storage().instance().set(&key, &(next_id + 1));
         next_id

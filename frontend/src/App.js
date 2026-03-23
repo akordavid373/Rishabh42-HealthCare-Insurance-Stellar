@@ -15,9 +15,11 @@ import {
   AlertCircle,
   UserPlus,
   FileText,
-  Award
+  Award,
+  Database
 } from 'lucide-react';
 import './App.css';
+import MedicalRecordManager from './components/MedicalRecordManager';
 
 // Contract ABIs (simplified for demo)
 const HEALTHCARE_DRIPS_ABI = [
@@ -280,6 +282,13 @@ function App() {
               <Award className="w-4 h-4" />
               Contributors
             </button>
+            <button 
+              onClick={() => setActiveTab('records')}
+              className={activeTab === 'records' ? 'active' : ''}
+            >
+              <Database className="w-4 h-4" />
+              Records
+            </button>
           </nav>
           
           <div className="wallet-section">
@@ -310,6 +319,7 @@ function App() {
             {activeTab === 'dashboard' && <Dashboard />}
             {activeTab === 'funding' && <FundingRequests />}
             {activeTab === 'contributors' && <Contributors />}
+            {activeTab === 'records' && <MedicalRecordManager account={account} contract={contract} />}
           </>
         )}
       </main>

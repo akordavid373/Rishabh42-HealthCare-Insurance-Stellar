@@ -433,6 +433,44 @@ body {
 
 .dashboard,
 .funding-requests,
-.contributors {
+.contributors,
+.medical-record-manager {
   animation: fadeIn 0.6s ease-out;
+}
+
+/* Medical Record Manager Specific Styles */
+.upload-zone {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  border: 2px dashed #667eea;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.upload-zone:hover {
+  border-color: #764ba2;
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+}
+
+.record-card {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+.record-card:hover {
+  border-color: #667eea;
+}
+
+/* Glassmorphism for Modals */
+.fixed.inset-0 {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+/* Responsive improvements for records */
+@media (max-width: 640px) {
+  .medical-record-manager {
+    padding: 1rem;
+  }
 }
