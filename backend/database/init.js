@@ -135,103 +135,12 @@ function initializeDatabase() {
         FOREIGN KEY (user_id) REFERENCES users (id)
       )`,
 
-      `CREATE TABLE IF NOT EXISTS premium_plans (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER NOT NULL,
-        base_premium DECIMAL(10,2) NOT NULL,
-        current_premium DECIMAL(10,2) NOT NULL,
-        coverage_type TEXT CHECK (coverage_type IN ('basic', 'standard', 'premium', 'comprehensive')),
-        deductible DECIMAL(10,2) DEFAULT 0,
-        copayment DECIMAL(10,2) DEFAULT 0,
-        coverage_limit DECIMAL(10,2),
-        effective_date DATE NOT NULL,
-        renewal_date DATE,
-        status TEXT CHECK (status IN ('active', 'inactive', 'suspended', 'cancelled')) DEFAULT 'active',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (patient_id) REFERENCES patients (id)
-      )`,
 
-      `CREATE TABLE IF NOT EXISTS premium_adjustments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER NOT NULL,
-        premium_plan_id INTEGER NOT NULL,
-        adjustment_type TEXT CHECK (adjustment_type IN ('increase', 'decrease', 'freeze', 'special_adjustment')),
-        previous_premium DECIMAL(10,2) NOT NULL,
-        new_premium DECIMAL(10,2) NOT NULL,
-        adjustment_amount DECIMAL(10,2) NOT NULL,
-        adjustment_percentage DECIMAL(5,2),
-        adjustment_reason TEXT NOT NULL,
-        ai_score DECIMAL(5,4),
-        risk_factors TEXT,
-        market_conditions TEXT,
-        health_metrics TEXT,
-        claim_history_summary TEXT,
-        governance_status TEXT CHECK (governance_status IN ('pending', 'approved', 'rejected', 'manual_review')) DEFAULT 'pending',
-        governance_reviewer_id INTEGER,
-        governance_notes TEXT,
-        effective_date DATE NOT NULL,
-        notification_sent BOOLEAN DEFAULT FALSE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (patient_id) REFERENCES patients (id),
-        FOREIGN KEY (premium_plan_id) REFERENCES premium_plans (id),
-        FOREIGN KEY (governance_reviewer_id) REFERENCES users (id)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS premium_adjustment_triggers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE,
-        trigger_type TEXT CHECK (trigger_type IN ('claim_frequency', 'claim_amount', 'health_metric', 'market_condition', 'policy_change', 'time_based')),
-        condition_operator TEXT CHECK (condition_operator IN ('>', '<', '>=', '<=', '=', '!=', 'BETWEEN', 'IN')),
-        condition_value TEXT NOT NULL,
-        adjustment_percentage DECIMAL(5,2),
-        adjustment_amount DECIMAL(10,2),
-        is_active BOOLEAN DEFAULT TRUE,
-        priority INTEGER DEFAULT 1,
-        description TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
 
-      `CREATE TABLE IF NOT EXISTS premium_adjustment_limits (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER,
-        plan_type TEXT CHECK (plan_type IN ('basic', 'standard', 'premium', 'comprehensive')),
-        max_annual_increase_percentage DECIMAL(5,2) DEFAULT 20.0,
-        max_single_increase_percentage DECIMAL(5,2) DEFAULT 10.0,
-        max_annual_decrease_percentage DECIMAL(5,2) DEFAULT 30.0,
-        cooling_period_days INTEGER DEFAULT 30,
-        requires_governance_threshold DECIMAL(5,2) DEFAULT 15.0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (patient_id) REFERENCES patients (id)
-      )`,
 
-      `CREATE TABLE IF NOT EXISTS health_metrics (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER NOT NULL,
-        metric_type TEXT CHECK (metric_type IN ('bmi', 'blood_pressure', 'cholesterol', 'blood_sugar', 'exercise_frequency', 'smoking_status', 'alcohol_consumption', 'chronic_conditions')),
-        metric_value TEXT NOT NULL,
-        metric_unit TEXT,
-        recorded_date DATE NOT NULL,
-        source TEXT CHECK (source IN ('manual_entry', 'device_sync', 'provider_input', 'lab_result')),
-        normalized_score DECIMAL(5,4),
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (patient_id) REFERENCES patients (id)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS market_conditions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        condition_type TEXT CHECK (condition_type IN ('inflation_rate', 'healthcare_cost_index', 'industry_trends', 'regulatory_changes', 'market_competition')),
-        condition_value DECIMAL(10,4) NOT NULL,
-        condition_unit TEXT,
-        effective_date DATE NOT NULL,
-        source TEXT,
-        impact_factor DECIMAL(5,4) DEFAULT 1.0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     ];
 
@@ -245,14 +154,7 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id)',
       'CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(appointment_date)',
       'CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)',
-      'CREATE INDEX IF NOT EXISTS idx_premium_plans_patient_id ON premium_plans(patient_id)',
-      'CREATE INDEX IF NOT EXISTS idx_premium_adjustments_patient_id ON premium_adjustments(patient_id)',
-      'CREATE INDEX IF NOT EXISTS idx_premium_adjustments_plan_id ON premium_adjustments(premium_plan_id)',
-      'CREATE INDEX IF NOT EXISTS idx_premium_adjustments_governance_status ON premium_adjustments(governance_status)',
-      'CREATE INDEX IF NOT EXISTS idx_health_metrics_patient_id ON health_metrics(patient_id)',
-      'CREATE INDEX IF NOT EXISTS idx_health_metrics_type_date ON health_metrics(metric_type, recorded_date)',
-      'CREATE INDEX IF NOT EXISTS idx_market_conditions_type_date ON market_conditions(condition_type, effective_date)',
-      'CREATE INDEX IF NOT EXISTS idx_adjustment_triggers_type ON premium_adjustment_triggers(trigger_type)'
+
     ];
 
     let completedTables = 0;
