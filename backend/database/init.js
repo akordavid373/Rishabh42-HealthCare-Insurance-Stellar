@@ -133,6 +133,75 @@ function initializeDatabase() {
         read BOOLEAN DEFAULT FALSE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS fraud_analysis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        claim_id INTEGER NOT NULL,
+        patient_id INTEGER NOT NULL,
+        risk_score INTEGER NOT NULL DEFAULT 0,
+        risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
+        flags TEXT,
+        analysis_details TEXT,
+        pattern_data TEXT,
+        anomaly_data TEXT,
+        reviewed BOOLEAN DEFAULT FALSE,
+        reviewed_by INTEGER,
+        review_date DATETIME,
+        review_notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (claim_id) REFERENCES insurance_claims (id),
+        FOREIGN KEY (patient_id) REFERENCES patients (id),
+        FOREIGN KEY (reviewed_by) REFERENCES users (id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS claim_patterns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_id INTEGER NOT NULL,
+        claim_frequency_monthly REAL DEFAULT 0,
+        average_claim_amount REAL DEFAULT 0,
+        total_claimed_amount REAL DEFAULT 0,
+        unique_providers_count INTEGER DEFAULT 0,
+        claim_types_count INTEGER DEFAULT 0,
+        pattern_risk_score INTEGER DEFAULT 0,
+        last_analysis_date DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (patient_id) REFERENCES patients (id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS fraud_thresholds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        max_monthly_claims INTEGER DEFAULT 5,
+        max_single_claim_amount DECIMAL(10,2) DEFAULT 10000.00,
+        risk_score_threshold INTEGER DEFAULT 50,
+        frequency_penalty INTEGER DEFAULT 10,
+        amount_penalty INTEGER DEFAULT 20,
+        pattern_penalty INTEGER DEFAULT 30,
+        timing_penalty INTEGER DEFAULT 15,
+        amount_anomaly_threshold REAL DEFAULT 2.0,
+        timing_anomaly_hours INTEGER DEFAULT 24,
+        provider_anomaly_threshold INTEGER DEFAULT 10,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS flagged_claims (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        claim_id INTEGER NOT NULL UNIQUE,
+        fraud_analysis_id INTEGER NOT NULL,
+        flag_reason TEXT NOT NULL,
+        flag_severity TEXT CHECK (flag_severity IN ('low', 'medium', 'high', 'critical')),
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'under_review', 'resolved', 'false_positive')),
+        assigned_reviewer INTEGER,
+        review_date DATETIME,
+        resolution_notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (claim_id) REFERENCES insurance_claims (id),
+        FOREIGN KEY (fraud_analysis_id) REFERENCES fraud_analysis (id),
+        FOREIGN KEY (assigned_reviewer) REFERENCES users (id)
       )`
     ];
 
@@ -145,7 +214,14 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_payments_patient_id ON premium_payments(patient_id)',
       'CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id)',
       'CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(appointment_date)',
-      'CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)'
+      'CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_fraud_analysis_claim_id ON fraud_analysis(claim_id)',
+      'CREATE INDEX IF NOT EXISTS idx_fraud_analysis_patient_id ON fraud_analysis(patient_id)',
+      'CREATE INDEX IF NOT EXISTS idx_fraud_analysis_risk_level ON fraud_analysis(risk_level)',
+      'CREATE INDEX IF NOT EXISTS idx_claim_patterns_patient_id ON claim_patterns(patient_id)',
+      'CREATE INDEX IF NOT EXISTS idx_flagged_claims_claim_id ON flagged_claims(claim_id)',
+      'CREATE INDEX IF NOT EXISTS idx_flagged_claims_status ON flagged_claims(status)',
+      'CREATE INDEX IF NOT EXISTS idx_flagged_claims_severity ON flagged_claims(flag_severity)'
     ];
 
     let completedTables = 0;

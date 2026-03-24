@@ -2,6 +2,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const { setCache, deleteCache } = require('../middleware/cache');
+const fraudDetectionService = require('../services/fraudDetectionService');
 
 const router = express.Router();
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../database/healthcare.db');
@@ -192,10 +193,34 @@ router.post('/', async (req, res, next) => {
         });
       }
       
-      res.status(201).json({
-        message: 'Claim created successfully',
-        claimId: this.lastID
-      });
+      try {
+        const fraudAnalysis = await fraudDetectionService.analyzeClaimFraud(this.lastID);
+        
+        if (req.io) {
+          req.io.to(`patient-${patientId}`).emit('fraud-analysis-complete', {
+            claimId: this.lastID,
+            riskLevel: fraudAnalysis.risk_level,
+            riskScore: fraudAnalysis.risk_score,
+            message: `Fraud analysis completed with ${fraudAnalysis.risk_level} risk level`
+          });
+        }
+        
+        res.status(201).json({
+          message: 'Claim created successfully',
+          claimId: this.lastID,
+          fraudAnalysis: {
+            risk_level: fraudAnalysis.risk_level,
+            risk_score: fraudAnalysis.risk_score,
+            requires_review: fraudAnalysis.risk_score >= 50
+          }
+        });
+      } catch (fraudError) {
+        console.error('Fraud analysis failed:', fraudError);
+        res.status(201).json({
+          message: 'Claim created successfully (fraud analysis pending)',
+          claimId: this.lastID
+        });
+      }
     });
     
     stmt.finalize();

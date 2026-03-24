@@ -15,6 +15,7 @@ const claimsRoutes = require('./routes/claims');
 const appointmentsRoutes = require('./routes/appointments');
 const paymentsRoutes = require('./routes/payments');
 const contributorVerificationRoutes = require('./routes/contributorVerification');
+const fraudDetectionRoutes = require('./routes/fraudDetection');
 
 const { initializeDatabase } = require('./database/init');
 const { authenticateToken } = require('./middleware/auth');
@@ -63,6 +64,7 @@ app.use('/api/claims', authenticateToken, cacheMiddleware, claimsRoutes);
 app.use('/api/appointments', authenticateToken, cacheMiddleware, appointmentsRoutes);
 app.use('/api/payments', authenticateToken, cacheMiddleware, paymentsRoutes);
 app.use('/api/contributor', authenticateToken, contributorVerificationRoutes);
+app.use('/api/fraud-detection', authenticateToken, cacheMiddleware, fraudDetectionRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ 
