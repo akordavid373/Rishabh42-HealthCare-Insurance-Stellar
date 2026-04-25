@@ -1,4 +1,5 @@
 pub mod healthcare_drips;
+pub mod parametric_insurance;
 
 #[cfg(test)]
 mod enhanced_contributor_tests;

@@ -24,6 +24,10 @@ const QueueProcessor     = require('./services/notifications/QueueProcessor');
 const fraudDetectionRoutes = require('./routes/fraudDetection');
 const securityRoutes = require('./routes/security');
 const aiRecommendationRoutes = require('./routes/aiRecommendation');
+const iotHealthMonitoringRoutes = require('./routes/iotHealthMonitoring');
+const crossPlatformIntegrationRoutes = require('./routes/crossPlatformIntegration');
+const advancedPaymentsRoutes = require('./routes/advancedPayments');
+const insuranceMarketplaceRoutes = require('./routes/insuranceMarketplace');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -85,6 +89,10 @@ app.use('/api/contributor', authenticateToken, contributorVerificationRoutes);
 app.use('/api/fraud-detection', authenticateToken, fraudDetectionRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/ai', authenticateToken, aiRecommendationRoutes);
+app.use('/api/iot', authenticateToken, iotHealthMonitoringRoutes);
+app.use('/api/integrations', authenticateToken, crossPlatformIntegrationRoutes);
+app.use('/api/advanced-payments', authenticateToken, advancedPaymentsRoutes);
+app.use('/api/marketplace', authenticateToken, insuranceMarketplaceRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
@@ -145,6 +153,10 @@ async function startServer() {
       console.log(`🔒 Advanced Security API enabled`);
       console.log(`📈 Performance monitoring active`);
       console.log(`🤖 AI Recommendation Engine enabled`);
+      console.log(`📡 IoT Health Monitoring API enabled`);
+      console.log(`🔗 Cross-Platform Integration Framework enabled`);
+      console.log(`💳 Advanced Payment Processing API enabled`);
+      console.log(`🏪 Insurance Marketplace Platform enabled`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

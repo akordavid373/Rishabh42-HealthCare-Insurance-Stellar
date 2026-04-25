@@ -147,6 +147,13 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id)',
       'CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(appointment_date)',
       'CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_iot_readings_patient ON iot_health_readings(patient_id)',
+      'CREATE INDEX IF NOT EXISTS idx_iot_readings_device ON iot_health_readings(device_id)',
+      'CREATE INDEX IF NOT EXISTS idx_iot_alerts_patient ON iot_alerts(patient_id)',
+      'CREATE INDEX IF NOT EXISTS idx_iot_alerts_status ON iot_alerts(status)',
+      'CREATE INDEX IF NOT EXISTS idx_adv_payments_payer ON advanced_payment_transactions(payer_id)',
+      'CREATE INDEX IF NOT EXISTS idx_marketplace_type ON marketplace_policies(policy_type)',
+      'CREATE INDEX IF NOT EXISTS idx_sync_logs_integration ON integration_sync_logs(integration_id)'
 
     ];
 
