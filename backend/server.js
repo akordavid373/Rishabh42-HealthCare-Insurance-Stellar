@@ -21,12 +21,18 @@ const notificationAnalyticsRoutes = require('./routes/notificationAnalytics');
 
 const NotificationEngine = require('./services/notifications/NotificationEngine');
 const QueueProcessor     = require('./services/notifications/QueueProcessor');
+const fraudDetectionRoutes = require('./routes/fraudDetection');
+const securityRoutes = require('./routes/security');
+const aiRecommendationRoutes = require('./routes/aiRecommendation');
 
 
 const { initializeDatabase } = require('./database/init');
 const { authenticateToken } = require('./middleware/auth');
 const { cacheMiddleware } = require('./middleware/cache');
 const { errorHandler } = require('./middleware/errorHandler');
+const performanceMonitoringService = require('./services/performanceMonitoringService');
+const threatIntelligenceService = require('./services/threatIntelligenceService');
+const aiPerformanceMonitoringService = require('./services/aiPerformanceMonitoringService');
 
 const app = express();
 const server = createServer(app);
@@ -58,6 +64,12 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Add performance monitoring middleware
+app.use(performanceMonitoringService.apiPerformanceMiddleware());
+
+// Add AI performance monitoring middleware
+app.use(aiPerformanceMonitoringService.aiPerformanceMiddleware());
+
 app.use((req, res, next) => {
   req.io = io;
   next();
@@ -70,6 +82,9 @@ app.use('/api/claims', authenticateToken, cacheMiddleware, claimsRoutes);
 app.use('/api/appointments', authenticateToken, cacheMiddleware, appointmentsRoutes);
 app.use('/api/payments', authenticateToken, cacheMiddleware, paymentsRoutes);
 app.use('/api/contributor', authenticateToken, contributorVerificationRoutes);
+app.use('/api/fraud-detection', authenticateToken, fraudDetectionRoutes);
+app.use('/api/security', securityRoutes);
+app.use('/api/ai', authenticateToken, aiRecommendationRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
@@ -120,6 +135,16 @@ async function startServer() {
 
       // Start queue processor after server is listening
       QueueProcessor.getInstance().start();
+    
+    // Start system monitoring
+    startSystemMonitoring();
+    
+    server.listen(PORT, () => {
+      console.log(`🚀 Healthcare API Server running on port ${PORT}`);
+      console.log(`📊 Dashboard available at: http://localhost:${PORT}/api/health`);
+      console.log(`🔒 Advanced Security API enabled`);
+      console.log(`📈 Performance monitoring active`);
+      console.log(`🤖 AI Recommendation Engine enabled`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -138,6 +163,51 @@ process.on('SIGINT', () => {
   QueueProcessor.getInstance().stop();
   server.close(() => process.exit(0));
 });
+// Start system monitoring
+function startSystemMonitoring() {
+  // Collect system metrics every 30 seconds
+  setInterval(async () => {
+    try {
+      await performanceMonitoringService.collectSystemMetrics();
+    } catch (error) {
+      console.error('Error collecting system metrics:', error);
+    }
+  }, 30000);
+
+  // Update threat feeds every hour
+  setInterval(async () => {
+    try {
+      await threatIntelligenceService.updateThreatFeeds();
+    } catch (error) {
+      console.error('Error updating threat feeds:', error);
+    }
+  }, 3600000);
+
+  // Collect AI system health metrics every 30 seconds
+  setInterval(async () => {
+    try {
+      const cpuUsage = process.cpuUsage().user / 1000000; // Convert to percentage
+      const memUsage = process.memoryUsage();
+      const memoryUsage = (memUsage.heapUsed / memUsage.heapTotal) * 100;
+      
+      await aiPerformanceMonitoringService.recordSystemHealth(
+        cpuUsage,
+        memoryUsage,
+        0, // disk usage would require additional monitoring
+        0, // active models count
+        0, // active requests count
+        0, // queue size
+        0  // error count
+      );
+    } catch (error) {
+      console.error('Error collecting AI system metrics:', error);
+    }
+  }, 30000);
+
+  console.log('🔍 System monitoring started');
+  console.log('🛡️  Threat intelligence updates scheduled');
+  console.log('🤖 AI performance monitoring started');
+}
 
 startServer();
 
