@@ -2,6 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const feeConfigService = require('./feeConfigService');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../database/healthcare.db');
 
@@ -88,17 +89,21 @@ class AdvancedPaymentService {
       .update(`${transactionId}${Date.now()}`)
       .digest('hex');
 
+    const networkFee = await this.estimateCryptoFee(paymentData.currency, paymentData.amount);
+
     return {
       type: 'crypto',
       network: paymentData.currency === 'XLM' ? 'stellar' : 'blockchain',
       tx_hash: txHash,
       instant: true,
       settlement_time: new Date().toISOString(),
-      network_fee: this.estimateCryptoFee(paymentData.currency, paymentData.amount)
+      network_fee: networkFee
     };
   }
 
   async processFiatPayment(paymentData, transactionId) {
+    const processingFee = await this.calculateProcessingFee(paymentData.amount, paymentData.currency);
+
     return {
       type: 'fiat',
       processor: 'internal',
@@ -107,17 +112,16 @@ class AdvancedPaymentService {
       settlement_time: paymentData.payment_method === 'instant_transfer'
         ? new Date().toISOString()
         : new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-      processing_fee: this.calculateProcessingFee(paymentData.amount, paymentData.currency)
+      processing_fee: processingFee
     };
   }
 
-  estimateCryptoFee(currency, amount) {
-    const feeRates = { XLM: 0.00001, ETH: 0.002, BTC: 0.0001, USDC: 0.001 };
-    return (feeRates[currency] || 0.001) * amount;
+  async estimateCryptoFee(currency, amount) {
+    return feeConfigService.calculateFee(amount, currency, 'network');
   }
 
-  calculateProcessingFee(amount, currency) {
-    return Math.round(amount * 0.029 * 100) / 100; // 2.9% standard
+  async calculateProcessingFee(amount, currency) {
+    return feeConfigService.calculateFee(amount, currency, 'processing');
   }
 
   async logTransaction(db, transactionId, paymentData, status, fraudScore, settlement = {}) {

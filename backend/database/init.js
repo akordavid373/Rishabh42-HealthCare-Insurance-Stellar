@@ -272,6 +272,21 @@ function initializeDatabase() {
         status TEXT DEFAULT 'online' CHECK (status IN ('online', 'away', 'offline')),
         last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (workspace_id, user_id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS fee_configs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        asset_code TEXT NOT NULL,
+        fee_context TEXT NOT NULL CHECK (fee_context IN ('network', 'processing')),
+        fee_type TEXT NOT NULL CHECK (fee_type IN ('flat', 'percentage', 'flat_plus_percentage')),
+        flat_amount REAL DEFAULT 0,
+        percentage_rate REAL DEFAULT 0,
+        min_fee REAL DEFAULT 0,
+        max_fee REAL,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(asset_code, fee_context)
       )`
     ];
 
@@ -298,7 +313,8 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_notif_deliveries_notif ON notification_deliveries(notification_id)',
       'CREATE INDEX IF NOT EXISTS idx_search_analytics_query ON search_analytics(query)',
       'CREATE INDEX IF NOT EXISTS idx_collab_messages_workspace ON collab_messages(workspace_id)',
-      'CREATE INDEX IF NOT EXISTS idx_collab_docs_workspace ON collab_documents(workspace_id)'
+      'CREATE INDEX IF NOT EXISTS idx_collab_docs_workspace ON collab_documents(workspace_id)',
+      'CREATE INDEX IF NOT EXISTS idx_fee_configs_asset ON fee_configs(asset_code, fee_context)'
 
     ];
 
