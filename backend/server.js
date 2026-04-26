@@ -28,6 +28,10 @@ const iotHealthMonitoringRoutes = require('./routes/iotHealthMonitoring');
 const crossPlatformIntegrationRoutes = require('./routes/crossPlatformIntegration');
 const advancedPaymentsRoutes = require('./routes/advancedPayments');
 const insuranceMarketplaceRoutes = require('./routes/insuranceMarketplace');
+const mlModelServingRoutes = require('./routes/mlModelServing');
+const advancedSearchRoutes = require('./routes/advancedSearch');
+const advancedNotificationsRoutes = require('./routes/advancedNotifications');
+const collaborationRoutes = require('./routes/collaboration');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -93,6 +97,10 @@ app.use('/api/iot', authenticateToken, iotHealthMonitoringRoutes);
 app.use('/api/integrations', authenticateToken, crossPlatformIntegrationRoutes);
 app.use('/api/advanced-payments', authenticateToken, advancedPaymentsRoutes);
 app.use('/api/marketplace', authenticateToken, insuranceMarketplaceRoutes);
+app.use('/api/ml', authenticateToken, mlModelServingRoutes);
+app.use('/api/search', authenticateToken, advancedSearchRoutes);
+app.use('/api/notifications', authenticateToken, advancedNotificationsRoutes);
+app.use('/api/collaboration', authenticateToken, collaborationRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
@@ -121,6 +129,15 @@ io.on('connection', (socket) => {
   socket.on('join-user-room', (userId) => {
     socket.join(`user-${userId}`);
     console.log(`Socket ${socket.id} joined user room ${userId}`);
+  });
+
+  // Collaboration rooms
+  socket.on('join-workspace', (workspaceId) => {
+    socket.join(`workspace-${workspaceId}`);
+  });
+
+  socket.on('join-document', (docId) => {
+    socket.join(`doc-${docId}`);
   });
 
   socket.on('disconnect', () => {

@@ -134,6 +134,144 @@ function initializeDatabase() {
         read BOOLEAN DEFAULT FALSE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS ml_models (
+        model_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        model_type TEXT NOT NULL,
+        description TEXT,
+        artifact_path TEXT,
+        input_schema TEXT DEFAULT '{}',
+        output_schema TEXT DEFAULT '{}',
+        hyperparameters TEXT DEFAULT '{}',
+        status TEXT DEFAULT 'staging' CHECK (status IN ('staging', 'production', 'deprecated', 'archived')),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS ml_predictions (
+        prediction_id TEXT PRIMARY KEY,
+        model_id TEXT NOT NULL,
+        input_data TEXT NOT NULL,
+        output_data TEXT NOT NULL,
+        latency_ms INTEGER,
+        ab_variant TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS ml_metrics (
+        metric_id TEXT PRIMARY KEY,
+        model_id TEXT NOT NULL,
+        metric_name TEXT NOT NULL,
+        value REAL NOT NULL,
+        recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS ml_experiments (
+        experiment_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        variants TEXT NOT NULL,
+        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed')),
+        start_date DATETIME,
+        end_date DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS advanced_notifications (
+        notification_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        channels TEXT DEFAULT '["in_app"]',
+        priority TEXT DEFAULT 'medium',
+        category TEXT DEFAULT 'general',
+        metadata TEXT DEFAULT '{}',
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
+        scheduled_at DATETIME,
+        sent_at DATETIME,
+        read_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS notification_deliveries (
+        delivery_id TEXT PRIMARY KEY,
+        notification_id TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('delivered', 'failed')),
+        error TEXT,
+        delivered_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS notification_preferences (
+        user_id TEXT PRIMARY KEY,
+        preferences TEXT DEFAULT '{}',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS search_analytics (
+        search_id TEXT PRIMARY KEY,
+        query TEXT NOT NULL,
+        options TEXT DEFAULT '{}',
+        latency_ms INTEGER,
+        searched_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS collab_workspaces (
+        workspace_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        owner_id TEXT NOT NULL,
+        resource_type TEXT DEFAULT 'general',
+        resource_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS collab_members (
+        workspace_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT DEFAULT 'editor' CHECK (role IN ('owner', 'editor', 'viewer')),
+        joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (workspace_id, user_id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS collab_documents (
+        doc_id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT DEFAULT '',
+        version INTEGER DEFAULT 1,
+        created_by TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS collab_edit_history (
+        edit_id TEXT PRIMARY KEY,
+        doc_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        patch TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS collab_messages (
+        message_id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        parent_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS collab_presence (
+        workspace_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        status TEXT DEFAULT 'online' CHECK (status IN ('online', 'away', 'offline')),
+        last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (workspace_id, user_id)
       )`
     ];
 
@@ -153,7 +291,14 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_iot_alerts_status ON iot_alerts(status)',
       'CREATE INDEX IF NOT EXISTS idx_adv_payments_payer ON advanced_payment_transactions(payer_id)',
       'CREATE INDEX IF NOT EXISTS idx_marketplace_type ON marketplace_policies(policy_type)',
-      'CREATE INDEX IF NOT EXISTS idx_sync_logs_integration ON integration_sync_logs(integration_id)'
+      'CREATE INDEX IF NOT EXISTS idx_sync_logs_integration ON integration_sync_logs(integration_id)',
+      'CREATE INDEX IF NOT EXISTS idx_ml_predictions_model ON ml_predictions(model_id)',
+      'CREATE INDEX IF NOT EXISTS idx_ml_metrics_model ON ml_metrics(model_id)',
+      'CREATE INDEX IF NOT EXISTS idx_adv_notifications_user ON advanced_notifications(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_notif_deliveries_notif ON notification_deliveries(notification_id)',
+      'CREATE INDEX IF NOT EXISTS idx_search_analytics_query ON search_analytics(query)',
+      'CREATE INDEX IF NOT EXISTS idx_collab_messages_workspace ON collab_messages(workspace_id)',
+      'CREATE INDEX IF NOT EXISTS idx_collab_docs_workspace ON collab_documents(workspace_id)'
 
     ];
 
