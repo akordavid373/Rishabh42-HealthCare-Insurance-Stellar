@@ -23,7 +23,22 @@
     "framer-motion": "^10.16.4",
     "qrcode.react": "^3.1.0",
     "otplib": "^12.0.1",
-    "socket.io-client": "^4.7.2"
+    "socket.io-client": "^4.7.2",
+    "react-intersection-observer": "^9.5.3",
+    "react-virtualized-auto-sizer": "^1.0.20",
+    "react-window": "^1.8.8",
+    "workbox-background-sync": "^7.0.0",
+    "workbox-broadcast-update": "^7.0.0",
+    "workbox-cacheable-response": "^7.0.0",
+    "workbox-core": "^7.0.0",
+    "workbox-expiration": "^7.0.0",
+    "workbox-google-analytics": "^7.0.0",
+    "workbox-navigation-preload": "^7.0.0",
+    "workbox-precaching": "^7.0.0",
+    "workbox-range-requests": "^7.0.0",
+    "workbox-routing": "^7.0.0",
+    "workbox-strategies": "^7.0.0",
+    "workbox-streams": "^7.0.0"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^0.6.0",
@@ -31,7 +46,13 @@
     "chai": "^4.2.0",
     "eslint": "^8.45.0",
     "eslint-config-react-app": "^7.0.1",
-    "prettier": "^3.0.0"
+    "prettier": "^3.0.0",
+    "eslint-plugin-jsx-a11y": "^6.8.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "webpack-bundle-analyzer": "^4.9.0",
+    "lighthouse": "^11.4.0",
+    "axe-core": "^4.8.2",
+    "@axe-core/react": "^4.8.2"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -39,13 +60,25 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.js --network localhost"
+    "deploy": "hardhat run scripts/deploy.js --network localhost",
+    "analyze": "npm run build && npx webpack-bundle-analyzer build/static/js/*.js",
+    "lighthouse": "lhci autorun",
+    "test:a11y": "react-scripts test --testPathPattern=a11y",
+    "test:performance": "react-scripts test --testPathPattern=performance",
+    "build:analyze": "npm run build && npm run analyze"
   },
   "eslintConfig": {
     "extends": [
       "react-app",
-      "react-app/jest"
-    ]
+      "react-app/jest",
+      "plugin:jsx-a11y/recommended"
+    ],
+    "plugins": ["jsx-a11y", "react-hooks"],
+    "rules": {
+      "jsx-a11y/anchor-is-valid": "warn",
+      "jsx-a11y/click-events-have-key-events": "warn",
+      "jsx-a11y/no-static-element-interactions": "warn"
+    }
   },
   "browserslist": {
     "production": [

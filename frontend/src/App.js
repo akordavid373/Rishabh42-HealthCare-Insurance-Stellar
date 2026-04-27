@@ -21,6 +21,9 @@ import {
   Cpu,
   CreditCard as CreditIcon,
   Bell,
+  Menu,
+  X,
+  ChevronDown,
 } from 'lucide-react';
 import './App.css';
 import MedicalRecordManager from './components/MedicalRecordManager';
@@ -59,12 +62,27 @@ function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   // Contract addresses (would come from deployment.json)
   const CONTRACT_ADDRESS = "0x..."; // Replace with actual address
 
   useEffect(() => {
     connectWallet();
+    
+    // Check if mobile device
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) {
+        setMobileMenuOpen(false);
+      }
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   const connectWallet = async () => {
@@ -270,6 +288,38 @@ function App() {
     </div>
   );
 
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: Activity },
+    { id: 'funding', label: 'Funding', icon: Users },
+    { id: 'contributors', label: 'Contributors', icon: Award },
+    { id: 'records', label: 'Records', icon: Database },
+    { id: 'security', label: 'Security', icon: Lock },
+    { id: 'engine', label: 'Engine', icon: Cpu },
+    { id: 'payments', label: 'Payments', icon: CreditIcon },
+    { id: 'provider', label: 'Provider', icon: Users },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+  ];
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setMobileMenuOpen(false);
+  };
+
+  const NavigationButton = ({ item, isMobileView = false }) => {
+    const Icon = item.icon;
+    return (
+      <button
+        onClick={() => handleTabChange(item.id)}
+        className={activeTab === item.id ? 'active' : ''}
+        aria-label={item.label}
+        aria-current={activeTab === item.id ? 'page' : false}
+      >
+        <Icon className="w-4 h-4" />
+        <span>{isMobileView ? item.label.substring(0, 8) : item.label}</span>
+      </button>
+    );
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -279,71 +329,26 @@ function App() {
             <h1>Healthcare Drips</h1>
           </div>
           
-          <nav className="header-nav">
-            <button 
-              onClick={() => setActiveTab('dashboard')}
-              className={activeTab === 'dashboard' ? 'active' : ''}
-            >
-              <Activity className="w-4 h-4" />
-              Dashboard
-            </button>
-            <button 
-              onClick={() => setActiveTab('funding')}
-              className={activeTab === 'funding' ? 'active' : ''}
-            >
-              <Users className="w-4 h-4" />
-              Funding
-            </button>
-            <button 
-              onClick={() => setActiveTab('contributors')}
-              className={activeTab === 'contributors' ? 'active' : ''}
-            >
-              <Award className="w-4 h-4" />
-              Contributors
-            </button>
-            <button 
-              onClick={() => setActiveTab('records')}
-              className={activeTab === 'records' ? 'active' : ''}
-            >
-              <Database className="w-4 h-4" />
-              Records
-            </button>
-            <button 
-              onClick={() => setActiveTab('security')}
-              className={activeTab === 'security' ? 'active' : ''}
-            >
-              <Lock className="w-4 h-4" />
-              Security
-            </button>
-            <button 
-              onClick={() => setActiveTab('engine')}
-              className={activeTab === 'engine' ? 'active' : ''}
-            >
-              <Cpu className="w-4 h-4" />
-              Engine
-            </button>
-            <button 
-              onClick={() => setActiveTab('payments')}
-              className={activeTab === 'payments' ? 'active' : ''}
-            >
-              <CreditIcon className="w-4 h-4" />
-              Payments
-            </button>
+          {/* Desktop Navigation */}
+          {!isMobile && (
+            <nav className="header-nav" role="navigation" aria-label="Main navigation">
+              {navItems.map((item) => (
+                <NavigationButton key={item.id} item={item} />
+              ))}
+            </nav>
+          )}
+          
+          {/* Mobile Menu Toggle */}
+          {isMobile && (
             <button
-              onClick={() => setActiveTab('provider')}
-              className={activeTab === 'provider' ? 'active' : ''}
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle navigation menu"
+              aria-expanded={mobileMenuOpen}
             >
-              <Users className="w-4 h-4" />
-              Provider
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-            <button
-              onClick={() => setActiveTab('notifications')}
-              className={activeTab === 'notifications' ? 'active' : ''}
-            >
-              <Bell className="w-4 h-4" />
-              Notifications
-            </button>
-          </nav>
+          )}
           
           <div className="wallet-section">
             {account ? (
@@ -359,6 +364,17 @@ function App() {
             )}
           </div>
         </div>
+        
+        {/* Mobile Navigation Menu */}
+        {isMobile && mobileMenuOpen && (
+          <nav className="mobile-nav" role="navigation" aria-label="Mobile navigation">
+            <div className="mobile-nav-grid">
+              {navItems.map((item) => (
+                <NavigationButton key={item.id} item={item} isMobileView={true} />
+              ))}
+            </div>
+          </nav>
+        )}
       </header>
 
       <main className="app-main">

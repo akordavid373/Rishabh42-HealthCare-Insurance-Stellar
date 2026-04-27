@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
+  <meta name="theme-color" content="#667eea" />
+  <meta name="description" content="Modern healthcare insurance platform with recurring payments and blockchain integration" />
+  <meta name="keywords" content="healthcare, insurance, blockchain, medical, payments, stellar" />
+  <meta name="author" content="Healthcare Drips Team" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="%PUBLIC_URL%" />
+  <meta property="og:title" content="Healthcare Drips - Medical Insurance Platform" />
+  <meta property="og:description" content="Modern healthcare insurance platform with recurring payments and blockchain integration" />
+  <meta property="og:image" content="%PUBLIC_URL%/og-image.png" />
+  
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="%PUBLIC_URL%" />
+  <meta property="twitter:title" content="Healthcare Drips - Medical Insurance Platform" />
+  <meta property="twitter:description" content="Modern healthcare insurance platform with recurring payments and blockchain integration" />
+  <meta property="twitter:image" content="%PUBLIC_URL%/og-image.png" />
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+  
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="%PUBLIC_URL%/icons/icon-192x192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Healthcare Drips" />
+  
+  <!-- Microsoft Tile -->
+  <meta name="msapplication-TileColor" content="#667eea" />
+  <meta name="msapplication-config" content="%PUBLIC_URL%/browserconfig.xml" />
+  
+  <!-- Preconnect to external domains -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://api.etherscan.io" />
+  
+  <!-- DNS Prefetch for performance -->
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net" />
+  <link rel="dns-prefetch" href="//api.etherscan.io" />
+  
+  <!-- Preload critical resources -->
+  <link rel="preload" href="%PUBLIC_URL%/manifest.json" as="fetch" crossorigin />
+  
+  <!-- Security Headers -->
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-Frame-Options" content="DENY" />
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.etherscan.io https://mainnet.infura.io;" />
+  
+  <!-- Accessibility improvements -->
+  <meta name="robots" content="index, follow" />
+  <meta name="googlebot" content="index, follow" />
+  
+  <title>Healthcare Drips - Medical Insurance Platform</title>
+  
+  <!-- Inline critical CSS for faster loading -->
+  <style>
+    /* Critical CSS for above-the-fold content */
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    
+    #root {
+      min-height: 100vh;
+    }
+    
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: white;
+      font-size: 1.2rem;
+    }
+    
+    /* Loading spinner */
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 1rem;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    /* No script fallback */
+    .noscript {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #667eea;
+      color: white;
+      text-align: center;
+      padding: 2rem;
+    }
+    
+    .noscript h1 {
+      margin-bottom: 1rem;
+    }
+    
+    .noscript p {
+      max-width: 500px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <noscript>
+    <div class="noscript">
+      <div>
+        <h1>JavaScript Required</h1>
+        <p>Healthcare Drips requires JavaScript to function properly. Please enable JavaScript in your browser settings and reload the page.</p>
+        <p>Our platform uses modern web technologies including blockchain integration, real-time updates, and progressive web app features that require JavaScript.</p>
+      </div>
+    </div>
+  </noscript>
+  
+  <div id="root">
+    <!-- Loading fallback -->
+    <div class="loading" role="status" aria-label="Loading application">
+      <div class="spinner" aria-hidden="true"></div>
+      <span>Loading Healthcare Drips...</span>
+    </div>
+  </div>
+  
+  <!-- Service Worker Registration -->
+  <script>
+    // Register service worker for PWA functionality
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('SW registered: ', registration);
+            
+            // Check for updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New content is available, show update notification
+                  if (confirm('New version available! Reload to update?')) {
+                    window.location.reload();
+                  }
+                }
+              });
+            });
+          })
+          .catch((registrationError) => {
+            console.log('SW registration failed: ', registrationError);
+          });
+      });
+    }
+    
+    // Performance monitoring
+    if ('performance' in window) {
+      window.addEventListener('load', () => {
+        const perfData = performance.getEntriesByType('navigation')[0];
+        console.log('Page Load Time:', perfData.loadEventEnd - perfData.fetchStart, 'ms');
+        
+        // Report to analytics if available
+        if (window.gtag) {
+          gtag('event', 'page_load_time', {
+            value: perfData.loadEventEnd - perfData.fetchStart
+          });
+        }
+      });
+    }
+    
+    // Error handling
+    window.addEventListener('error', (event) => {
+      console.error('Global error:', event.error);
+      // Report to error tracking service
+    });
+    
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('Unhandled promise rejection:', event.reason);
+      // Report to error tracking service
+    });
+  </script>
+</body>
+</html>
