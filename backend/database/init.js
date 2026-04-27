@@ -433,6 +433,20 @@ function initializeDatabase() {
         resolution TEXT,
         opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         resolved_at DATETIME
+      )`,
+      
+      `CREATE TABLE IF NOT EXISTS system_logs (
+        id TEXT PRIMARY KEY,
+        level TEXT NOT NULL,
+        message TEXT NOT NULL,
+        context TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        source TEXT,
+        user_id INTEGER,
+        ip_address TEXT,
+        user_agent TEXT,
+        compliance_relevant BOOLEAN DEFAULT FALSE,
+        FOREIGN KEY (user_id) REFERENCES users (id)
       )`
     ];
 
