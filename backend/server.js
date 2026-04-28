@@ -127,6 +127,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.get('/api/ready', (req, res) => {
+  res.json({ 
+    status: 'READY', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
@@ -182,6 +190,7 @@ async function startServer() {
       console.log(`🔗 Cross-Platform Integration Framework enabled`);
       console.log(`💳 Advanced Payment Processing API enabled`);
       console.log(`🏪 Insurance Marketplace Platform enabled`);
+      console.log(`⛓️ Blockchain Analytics API enabled`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -240,6 +249,18 @@ function startSystemMonitoring() {
       console.error('Error collecting AI system metrics:', error);
     }
   }, 30000);
+
+  // Scheduled daily backup at 2:00 AM (simulated here with a 24h interval)
+  setInterval(async () => {
+    try {
+      console.log('Running scheduled daily backup...');
+      const result = await backupService.performBackup();
+      await backupService.replicateToRemoteRegion(result.path);
+      console.log(`Scheduled backup completed and replicated: ${result.fileName}`);
+    } catch (error) {
+      console.error('Error during scheduled backup:', error);
+    }
+  }, 86400000); // 24 hours
 
   console.log('🔍 System monitoring started');
   console.log('🛡️  Threat intelligence updates scheduled');
