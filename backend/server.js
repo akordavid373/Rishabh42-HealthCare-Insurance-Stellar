@@ -37,7 +37,7 @@ const treasuryRoutes = require('./routes/treasury');
 const dataVisualizationRoutes = require('./routes/dataVisualization');
 const reinsuranceRoutes = require('./routes/reinsurance');
 const fraudContractsRoutes = require('./routes/fraudContracts');
-
+const databaseOptimizationRoutes = require('./routes/databaseOptimization');
 
 const { initializeDatabase } = require('./database/init');
 const { authenticateToken } = require('./middleware/auth');
@@ -111,6 +111,7 @@ app.use('/api/treasury', authenticateToken, treasuryRoutes);
 app.use('/api/visualization', authenticateToken, dataVisualizationRoutes);
 app.use('/api/reinsurance', authenticateToken, reinsuranceRoutes);
 app.use('/api/fraud-contracts', authenticateToken, fraudContractsRoutes);
+app.use('/api/database-optimization', authenticateToken, databaseOptimizationRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
