@@ -251,6 +251,18 @@ function startSystemMonitoring() {
     }
   }, 30000);
 
+  // Scheduled daily backup at 2:00 AM (simulated here with a 24h interval)
+  setInterval(async () => {
+    try {
+      console.log('Running scheduled daily backup...');
+      const result = await backupService.performBackup();
+      await backupService.replicateToRemoteRegion(result.path);
+      console.log(`Scheduled backup completed and replicated: ${result.fileName}`);
+    } catch (error) {
+      console.error('Error during scheduled backup:', error);
+    }
+  }, 86400000); // 24 hours
+
   console.log('🔍 System monitoring started');
   console.log('🛡️  Threat intelligence updates scheduled');
   console.log('🤖 AI performance monitoring started');
