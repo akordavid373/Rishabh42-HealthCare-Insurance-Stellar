@@ -41,6 +41,12 @@ const dataVisualizationRoutes = require('./routes/dataVisualization');
 const reinsuranceRoutes = require('./routes/reinsurance');
 const fraudContractsRoutes = require('./routes/fraudContracts');
 const blockchainRoutes = require('./routes/blockchain');
+const cacheRoutes = require('./routes/cache');
+const databaseOptimizationRoutes = require('./routes/databaseOptimization');
+const advancedCacheService = require('./services/advancedCacheService');
+const feeConfigService = require('./services/feeConfigService');
+const insuranceMarketplaceService = require('./services/insuranceMarketplaceService');
+
 
 
 const { initializeDatabase } = require('./database/init');
@@ -116,6 +122,8 @@ app.use('/api/visualization', authenticateToken, dataVisualizationRoutes);
 app.use('/api/reinsurance', authenticateToken, reinsuranceRoutes);
 app.use('/api/fraud-contracts', authenticateToken, fraudContractsRoutes);
 app.use('/api/database-optimization', authenticateToken, databaseOptimizationRoutes);
+app.use('/api/cache', cacheRoutes);
+
 
 // ── Blockchain Integration Layer ─────────────────────────────────────────
 app.use('/api/blockchain', blockchainRoutes);
@@ -184,6 +192,21 @@ async function startServer() {
 
     // Initialise notification engine with the socket.io instance
     NotificationEngine.getInstance(io);
+
+    // Initial cache warming for critical resources
+    advancedCacheService.warmCache([
+      {
+        key: '/api/fee-configs',
+        fetcher: () => feeConfigService.listConfigs(),
+        options: { ttl: 3600 }
+      },
+      {
+        key: '/api/marketplace/search',
+        fetcher: () => insuranceMarketplaceService.searchPolicies(),
+        options: { ttl: 3600 }
+      }
+    ]);
+
 
     server.listen(PORT, () => {
       loggingService.info(`🚀 Healthcare API Server running on port ${PORT}`);
