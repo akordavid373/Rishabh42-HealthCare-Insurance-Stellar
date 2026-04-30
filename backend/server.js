@@ -56,6 +56,9 @@ const { errorHandler } = require('./middleware/errorHandler');
 const performanceMonitoringService = require('./services/performanceMonitoringService');
 const threatIntelligenceService = require('./services/threatIntelligenceService');
 const aiPerformanceMonitoringService = require('./services/aiPerformanceMonitoringService');
+const emailService = require('./services/emailService');
+const realTimeProcessingService = require('./services/realTimeProcessingService');
+const advancedRateLimitingService = require('./services/advancedRateLimitingService');
 
 const app = express();
 const server = createServer(app);
@@ -86,6 +89,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(auditMiddleware({ logReads: false }));
 
 // Add performance monitoring middleware
 app.use(performanceMonitoringService.apiPerformanceMiddleware());
@@ -132,7 +136,6 @@ app.use('/api/blockchain', blockchainRoutes);
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
 app.use('/api/notifications/analytics',    authenticateToken, notificationAnalyticsRoutes);
 app.use('/api/notifications',              authenticateToken, notificationsRoutes);
-
 
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -290,6 +293,16 @@ function startSystemMonitoring() {
   loggingService.info('🔍 System monitoring started');
   loggingService.info('🛡️  Threat intelligence updates scheduled');
   loggingService.info('🤖 AI performance monitoring started');
+
+  // Apply audit log retention policy daily
+  setInterval(async () => {
+    try {
+      const auditService = require('./services/auditService');
+      await auditService.applyRetentionPolicy(90); // Keep logs for 90 days
+    } catch (error) {
+      console.error('Error applying audit retention policy:', error);
+    }
+  }, 24 * 60 * 60 * 1000);
 }
 
 startServer();
