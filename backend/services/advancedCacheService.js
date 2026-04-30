@@ -42,6 +42,7 @@ class AdvancedCacheService {
           console.error('Redis Error:', err);
           this.isRedisReady = false;
           this.metrics.errors++;
+          this._handleConnectionFailure();
         });
 
         this.redisClient.on('connect', () => {
@@ -57,11 +58,27 @@ class AdvancedCacheService {
     }
   }
 
+  _handleConnectionFailure() {
+    // Basic circuit breaker: if Redis fails, we stop trying for 30s
+    if (this.isRedisReady) {
+      this.isRedisReady = false;
+      console.warn('Redis circuit breaker tripped. Falling back to L1 only.');
+      setTimeout(() => {
+        console.log('Attempting to reset Redis circuit breaker...');
+        this._initRedis().catch(() => {
+          this.isRedisReady = false;
+        });
+      }, 30000);
+    }
+  }
+
   /**
    * Get data from cache with fallback and analytics
    */
   async get(key, options = {}) {
     const startTime = Date.now();
+    const resourceType = this._getResourceType(key);
+    
     try {
       let data = null;
 
@@ -79,7 +96,7 @@ class AdvancedCacheService {
       }
 
       const latency = Date.now() - startTime;
-      this._recordMetrics(data ? 'hit' : 'miss', latency);
+      this._recordMetrics(data ? 'hit' : 'miss', latency, resourceType);
 
       if (!data) return null;
 
@@ -139,10 +156,18 @@ class AdvancedCacheService {
     try {
       if (this.isRedisReady) {
         if (this.useCluster) {
-          // Cluster invalidation is more complex, usually done via pub/sub or scanning nodes
-          // For simplicity in this demo, we'll use a prefix approach
-          console.log(`Invalidating pattern: ${pattern} in Cluster`);
-          // In a real cluster, you'd use a more sophisticated approach
+          // Cluster invalidation: we need to scan all nodes
+          const masters = this.redisClient.masters();
+          for (const master of masters) {
+            let cursor = 0;
+            do {
+              const reply = await master.scan(cursor, { MATCH: `*${pattern}*`, COUNT: 100 });
+              cursor = reply.cursor;
+              if (reply.keys.length > 0) {
+                await master.del(reply.keys);
+              }
+            } while (cursor !== 0);
+          }
         } else {
           const keys = await this.redisClient.keys(`*${pattern}*`);
           if (keys.length > 0) {
@@ -159,6 +184,7 @@ class AdvancedCacheService {
         }
       });
 
+      console.log(`Cache invalidated for pattern: ${pattern}`);
       return true;
     } catch (error) {
       console.error('Cache invalidation error:', error);
@@ -171,16 +197,21 @@ class AdvancedCacheService {
    */
   async warmCache(items) {
     console.log(`Starting cache warming for ${items.length} items...`);
+    let successCount = 0;
+    
     for (const item of items) {
       const { key, fetcher, options } = item;
       try {
         const data = await fetcher();
-        await this.set(key, data, options);
+        if (data) {
+          await this.set(key, data, options);
+          successCount++;
+        }
       } catch (error) {
         console.error(`Failed to warm cache for key ${key}:`, error);
       }
     }
-    console.log('Cache warming completed');
+    console.log(`Cache warming completed. Successfully warmed ${successCount}/${items.length} items.`);
   }
 
   /**
@@ -199,18 +230,37 @@ class AdvancedCacheService {
       hitRatio,
       avgLatencyMs: avgLatency,
       redisStatus: this.isRedisReady ? 'connected' : 'disconnected',
-      redisStatus: this.isRedisReady ? 'connected' : 'disconnected',
-      redisType: this.useCluster ? 'cluster' : 'standalone'
+      redisType: this.useCluster ? 'cluster' : 'standalone',
+      resourceMetrics: this.metrics.resources || {}
     };
   }
 
-  _recordMetrics(type, latency) {
+  _recordMetrics(type, latency, resourceType) {
     if (type === 'hit') this.metrics.hits++;
     else this.metrics.misses++;
     
     this.metrics.latency.push(latency);
-    if (this.metrics.latency.length > 1000) this.metrics.latency.shift(); // Keep last 1000
+    if (this.metrics.latency.length > 1000) this.metrics.latency.shift();
+
+    // Track per-resource metrics
+    if (!this.metrics.resources) this.metrics.resources = {};
+    if (!this.metrics.resources[resourceType]) {
+      this.metrics.resources[resourceType] = { hits: 0, misses: 0 };
+    }
+    
+    if (type === 'hit') this.metrics.resources[resourceType].hits++;
+    else this.metrics.resources[resourceType].misses++;
+  }
+
+  _getResourceType(key) {
+    if (key.includes('/patients')) return 'patient';
+    if (key.includes('/medical-records')) return 'medical_record';
+    if (key.includes('/claims')) return 'claim';
+    if (key.includes('/appointments')) return 'appointment';
+    if (key.includes('/payments')) return 'payment';
+    return 'other';
   }
 }
 
 module.exports = new AdvancedCacheService();
+

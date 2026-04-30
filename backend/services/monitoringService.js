@@ -38,6 +38,21 @@ class MonitoringService {
       registers: [this.register]
     });
 
+    this.cacheHitsCounter = new promClient.Counter({
+      name: 'cache_hits_total',
+      help: 'Total number of cache hits',
+      labelNames: ['resource_type'],
+      registers: [this.register]
+    });
+
+    this.cacheMissesCounter = new promClient.Counter({
+      name: 'cache_misses_total',
+      help: 'Total number of cache misses',
+      labelNames: ['resource_type'],
+      registers: [this.register]
+    });
+
+
     // Start background checks
     this.startBackgroundMonitoring();
   }
